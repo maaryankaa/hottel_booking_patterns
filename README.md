@@ -10,7 +10,7 @@ Next.js 16 (App Router) • Supabase • Tailwind CSS • TypeScript • ShadCN 
 
 #### 1. Клонуй репозиторій
 ```bash
-git clone https://github.com/roneslav/hottel_booking_patterns.git
+git clone https://github.com/maaryankaa/hottel_booking_patterns
 cd hotel-booking
 ```
 
