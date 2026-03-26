@@ -19,22 +19,30 @@ export default function Header() {
   const supabase = createClient();
 
   useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        await fetchProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    };
+
+    checkUser();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth event:", event, session?.user?.id);
 
-      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setUser(null);
-        }
+      if (event === "SIGNED_IN" && session?.user) {
+        setLoading(true);
+        await fetchProfile(session.user.id);
       } else if (event === "SIGNED_OUT") {
         setUser(null);
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -49,7 +57,7 @@ export default function Header() {
         .single();
 
       if (error) {
-        console.warn("Profile not found or error:", error.message);
+        console.error("Profile fetch error:", error.message);
         setUser(null);
         return;
       }
@@ -63,6 +71,8 @@ export default function Header() {
     } catch (err) {
       console.error("Unexpected profile fetch error:", err);
       setUser(null);
+    } finally {
+      setLoading(false);
     }
   };
 
