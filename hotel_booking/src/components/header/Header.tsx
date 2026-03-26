@@ -62,9 +62,11 @@ export default function Header() {
   }, [supabase]);
 
   // Змінена функція fetchProfile
+  // Змінена функція fetchProfile
   const fetchProfile = async (authUser: any) => {
     try {
-      // maybeSingle() не кидає помилку, якщо рядка немає
+      // maybeSingle() не кидає помилку, якщо рядка немає, 
+      // але нам треба обробити випадок, коли data повертається як null
       const { data, error } = await supabase
         .from("users")
         .select("name, email, is_admin")
@@ -75,22 +77,26 @@ export default function Header() {
         console.error("Profile fetch error:", error.message);
       }
 
-      // Якщо data є - беремо з неї. Якщо ні - беремо хоча б email з authUser
+      // Навіть якщо data === null (користувач зайшов через Google і профілю ще немає),
+      // ми все одно встановлюємо юзера, використовуючи дані з authUser!
       setUser({
         id: authUser.id,
-        name: data?.name || "User", // Якщо data null, буде "User"
+        // Якщо користувач з Google, його ім'я може бути в user_metadata
+        name: data?.name || authUser.user_metadata?.full_name || authUser.user_metadata?.name || "User", 
         email: authUser.email || data?.email || "",
         is_admin: data?.is_admin || false,
       });
+
     } catch (err) {
       console.error("Unexpected profile fetch error:", err);
       // Навіть при критичній помилці показуємо, що користувач залогінений
       setUser({
         id: authUser.id,
-        name: "User",
+        name: authUser.user_metadata?.full_name || "User",
         email: authUser.email || "",
       });
     } finally {
+      // ГАРАНТОВАНО вимикаємо стан завантаження!
       setLoading(false);
     }
   };
