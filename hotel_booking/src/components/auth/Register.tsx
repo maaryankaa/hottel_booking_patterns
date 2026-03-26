@@ -33,15 +33,13 @@ export default function RegisterForm() {
     if (authError) throw authError;
     if (!authData.user) throw new Error("No user created");
 
-    // Вставляємо в public.users, де id = auth.users.id
     const { error: profileError } = await supabase
       .from("users")
-      .insert({
-        id: authData.user.id,
-        name,
-        email,
-        password,
-      });
+      .update({
+        name: name,
+      })
+      .eq("id", authData.user.id);
+      
 
     if (profileError) throw profileError;
 
