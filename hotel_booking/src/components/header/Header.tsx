@@ -18,89 +18,71 @@ export default function Header() {
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
-  // Увага: ми передаємо в fetchProfile всю сесію, а не тільки uid
   useEffect(() => {
     let mounted = true;
 
-    // 1. Спочатку робимо примусову перевірку сесії
-    const initSession = async () => {
+    const fetchUser = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user && mounted) {
-          await fetchProfile(session.user);
-        } else if (mounted) {
-          setLoading(false);
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+        if (authError || !authUser) {
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const baseProfile: UserProfile = {
+          id: authUser.id,
+          name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || "User",
+          email: authUser.email || "",
+          is_admin: false,
+        };
+
+        const { data: dbData } = await supabase
+          .from("users")
+          .select("name, email, is_admin")
+          .eq("id", authUser.id)
+          .maybeSingle();
+
+        if (mounted) {
+          setUser({
+            ...baseProfile,
+            ...(dbData || {}),
+          });
         }
       } catch (err) {
+        console.error("Critical error fetching user:", err);
+        if (mounted) setUser(null);
+      } finally {
         if (mounted) setLoading(false);
       }
     };
 
-    initSession();
+    fetchUser();
 
-    // 2. Слухаємо подальші зміни (наприклад, якщо хтось натиснув Logout)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Ігноруємо INITIAL_SESSION тут, бо ми вже перевірили її вище
-      if (event === "SIGNED_IN") {
-        if (session?.user && mounted) {
-          await fetchProfile(session.user);
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        fetchUser();
       } else if (event === "SIGNED_OUT") {
-        if (mounted) {
-          setUser(null);
-          setLoading(false);
-        }
+        setUser(null);
+        setLoading(false);
       }
     });
+
+    const timeout = setTimeout(() => {
+      if (mounted && loading) setLoading(false);
+    }, 3000);
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      clearTimeout(timeout);
     };
   }, [supabase]);
-
-  // Змінена функція fetchProfile
-  // Змінена функція fetchProfile
-  const fetchProfile = async (authUser: any) => {
-    try {
-      // maybeSingle() не кидає помилку, якщо рядка немає, 
-      // але нам треба обробити випадок, коли data повертається як null
-      const { data, error } = await supabase
-        .from("users")
-        .select("name, email, is_admin")
-        .eq("id", authUser.id)
-        .maybeSingle(); 
-
-      if (error) {
-        console.error("Profile fetch error:", error.message);
-      }
-
-      // Навіть якщо data === null (користувач зайшов через Google і профілю ще немає),
-      // ми все одно встановлюємо юзера, використовуючи дані з authUser!
-      setUser({
-        id: authUser.id,
-        // Якщо користувач з Google, його ім'я може бути в user_metadata
-        name: data?.name || authUser.user_metadata?.full_name || authUser.user_metadata?.name || "User", 
-        email: authUser.email || data?.email || "",
-        is_admin: data?.is_admin || false,
-      });
-
-    } catch (err) {
-      console.error("Unexpected profile fetch error:", err);
-      // Навіть при критичній помилці показуємо, що користувач залогінений
-      setUser({
-        id: authUser.id,
-        name: authUser.user_metadata?.full_name || "User",
-        email: authUser.email || "",
-      });
-    } finally {
-      // ГАРАНТОВАНО вимикаємо стан завантаження!
-      setLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -132,7 +114,6 @@ export default function Header() {
           </Link>
 
           <nav className="flex items-center gap-3">
-            {/* АДМІН-ПАНЕЛЬ — ТІЛЬКИ ДЛЯ АДМІНІВ */}
             {user?.is_admin && (
               <Link
                 href="/admin"
