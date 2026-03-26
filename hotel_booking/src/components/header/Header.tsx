@@ -22,17 +22,30 @@ export default function Header() {
   useEffect(() => {
     let mounted = true;
 
+    // 1. Спочатку робимо примусову перевірку сесії
+    const initSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && mounted) {
+          await fetchProfile(session.user);
+        } else if (mounted) {
+          setLoading(false);
+        }
+      } catch (err) {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    initSession();
+
+    // 2. Слухаємо подальші зміни (наприклад, якщо хтось натиснув Logout)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
-        if (session?.user) {
-          await fetchProfile(session.user); // Передаємо весь об'єкт user
-        } else {
-          if (mounted) {
-            setUser(null);
-            setLoading(false);
-          }
+      // Ігноруємо INITIAL_SESSION тут, бо ми вже перевірили її вище
+      if (event === "SIGNED_IN") {
+        if (session?.user && mounted) {
+          await fetchProfile(session.user);
         }
       } else if (event === "SIGNED_OUT") {
         if (mounted) {
