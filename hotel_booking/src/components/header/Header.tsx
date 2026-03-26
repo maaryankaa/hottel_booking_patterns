@@ -18,59 +18,65 @@ export default function Header() {
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
+  // Увага: ми передаємо в fetchProfile всю сесію, а не тільки uid
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    };
-
-    checkUser();
+    let mounted = true;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth event:", event, session?.user?.id);
-
-      if (event === "SIGNED_IN" && session?.user) {
-        setLoading(true);
-        await fetchProfile(session.user.id);
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+        if (session?.user) {
+          await fetchProfile(session.user); // Передаємо весь об'єкт user
+        } else {
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
+        }
       } else if (event === "SIGNED_OUT") {
-        setUser(null);
-        setLoading(false);
+        if (mounted) {
+          setUser(null);
+          setLoading(false);
+        }
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [supabase]);
 
-  const fetchProfile = async (uid: string) => {
+  // Змінена функція fetchProfile
+  const fetchProfile = async (authUser: any) => {
     try {
+      // maybeSingle() не кидає помилку, якщо рядка немає
       const { data, error } = await supabase
         .from("users")
         .select("name, email, is_admin")
-        .eq("id", uid)
-        .single();
+        .eq("id", authUser.id)
+        .maybeSingle(); 
 
       if (error) {
         console.error("Profile fetch error:", error.message);
-        setUser(null);
-        return;
       }
 
+      // Якщо data є - беремо з неї. Якщо ні - беремо хоча б email з authUser
       setUser({
-        id: uid,
-        name: data.name || "User",
-        email: data.email,
-        is_admin: data.is_admin || false,
+        id: authUser.id,
+        name: data?.name || "User", // Якщо data null, буде "User"
+        email: authUser.email || data?.email || "",
+        is_admin: data?.is_admin || false,
       });
     } catch (err) {
       console.error("Unexpected profile fetch error:", err);
-      setUser(null);
+      // Навіть при критичній помилці показуємо, що користувач залогінений
+      setUser({
+        id: authUser.id,
+        name: "User",
+        email: authUser.email || "",
+      });
     } finally {
       setLoading(false);
     }
