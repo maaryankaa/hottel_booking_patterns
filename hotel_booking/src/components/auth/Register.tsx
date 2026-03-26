@@ -39,6 +39,7 @@ export default function RegisterForm() {
         name: name,
       })
       .eq("id", authData.user.id);
+      
 
     if (profileError) throw profileError;
 
